@@ -164,9 +164,9 @@ static int server_transaction(ddns_t *ctx, ddns_info_t *provider)
 
 /*
  * IP address validator, discards empty, local, loopback and other
- * globally invalid addresses
+ * globally invalid addresses, silent version, which does not log warnings if address is invalid
  */
-static int is_address_valid(int family, const char *host)
+static int is_address_valid_silent(int family, const char *host)
 {
 	/*
 	 * cloudflare would return requested hostname before client's ip address
@@ -240,6 +240,18 @@ static int is_address_valid(int family, const char *host)
 	}
 
 error:
+	return 0;
+}
+
+/*
+ * IP address validator, discards empty, local, loopback and other
+ * globally invalid addresses, also logs a warning when the given address is invalid
+ */
+static int is_address_valid(int family, const char *host)
+{
+	if (is_address_valid_silent(family,host)) {
+		return 1;
+	}
 	logit(LOG_WARNING, "IP%s address %s is not a valid Internet address.",
 	      family == AF_INET ? "v4" : family == AF_INET6 ? "v6" : "", host);
 	return 0;
@@ -387,7 +399,7 @@ static int get_ipv4_address_iface(const char *ifname, char *address, size_t len)
 	if (!inet_ntop(AF_INET, &((struct sockaddr_in *)&ifr.ifr_addr)->sin_addr, address, len))
 		return 1;
 
-	if (!is_address_valid(AF_INET, address)) {
+	if (!is_address_valid_silent(AF_INET, address)) {
 		logit(LOG_INFO, "Interface %s has an invalid/local IP# %s", ifname, address);
 		return 1;
 	}
@@ -437,7 +449,7 @@ static int get_address_iface(ddns_t *ctx, const char *ifname, char *address, siz
 			if (ptr)
 				*ptr = 0;
 
-			if (!is_address_valid(family, host)) {
+			if (!is_address_valid_silent(family, host)) {
 				logit(LOG_INFO, "Invalid/local address %s for %s, skipping ...", host, ifname);
 				continue;
 			}
